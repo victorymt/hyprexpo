@@ -2,7 +2,7 @@
 
 HyprExpo is a maintained Hyprland plugin for expose-style workspace overview with keyboard selection, drag-drop window movement, labels, configurable gaps and borders, multi-monitor placement, and Lua gestures.
 
-If you experience any bugs, you are encouraged to [open an issue](https://github.com/sandwichfarm/hyprexpo/issues/new). Information I can use to reproduce a bug is appreciated. 
+If you experience any bugs, you are encouraged to [open an issue](https://github.com/victorymt/hyprexpo/issues/new). Information I can use to reproduce a bug is appreciated. 
 
 [Docs (markdown)](docs/index.md) - [Docs (website)](http://hyprexpo.lol/docs) - [Announcement Post](https://www.reddit.com/r/hyprland/comments/1o30dsg/hyprexpoplus_outer_gaps_keyboard_navigation_and/)
 
@@ -27,7 +27,7 @@ ____
 ### hyprpm
 
 ```bash
-hyprpm add https://github.com/sandwichfarm/hyprexpo
+hyprpm add https://github.com/victorymt/hyprexpo
 hyprpm enable hyprexpo
 hyprpm reload
 ```
@@ -48,7 +48,7 @@ distributions such as Fedora where `lua-devel` exposes the generic module name.
 Build with the Makefile:
 
 ```bash
-git clone https://github.com/sandwichfarm/hyprexpo
+git clone https://github.com/victorymt/hyprexpo
 cd hyprexpo
 make all
 ```

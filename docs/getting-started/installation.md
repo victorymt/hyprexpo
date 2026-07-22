@@ -5,7 +5,7 @@
 hyprpm is the primary non-Nix installation path.
 
 ```bash
-hyprpm add https://github.com/sandwichfarm/hyprexpo
+hyprpm add https://github.com/victorymt/hyprexpo
 hyprpm enable hyprexpo
 hyprpm reload
 ```
@@ -26,7 +26,7 @@ distributions such as Fedora where `lua-devel` exposes the generic module name.
 Build with the Makefile:
 
 ```bash
-git clone https://github.com/sandwichfarm/hyprexpo
+git clone https://github.com/victorymt/hyprexpo
 cd hyprexpo
 make all
 ```
