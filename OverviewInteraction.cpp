@@ -1,9 +1,10 @@
-#include "HyprlandConfigCompat.hpp"
-#define HyprlandAPI CompatHyprlandAPI
+#include "HyprexpoRuntime.hpp"
 #include "OverviewInternal.hpp"
+#include "HyprexpoConfig.hpp"
 #include "HyprexpoLogic.hpp"
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/config/ConfigValue.hpp>
+#include <hyprland/src/config/shared/actions/ConfigActions.hpp>
 #include <hyprland/src/output/Monitor.hpp>
 #include <hyprland/src/pointer/cursor/CursorShapeOverrideController.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
@@ -12,6 +13,7 @@
 #include <cmath>
 
 using namespace std::chrono_literals;
+namespace Runtime = HyprexpoRuntime;
 
 void COverview::selectHoveredWorkspace() {
     if (closing)
@@ -143,12 +145,12 @@ PHLWINDOW COverview::windowAtTilePoint(int id, const Vector2D& localPoint) const
     if (!isTileValid(id))
         return nullptr;
 
-    const auto WORKSPACE = images[id].pWorkspace ? images[id].pWorkspace : HyprlandAPI::getWorkspaceByID(images[id].workspaceID);
+    const auto WORKSPACE = images[id].pWorkspace ? images[id].pWorkspace : Runtime::getWorkspaceByID(images[id].workspaceID);
     if (!WORKSPACE)
         return nullptr;
 
     const auto POINT = tilePointToWorkspacePoint(id, localPoint);
-    const auto& windows = HyprlandAPI::windows();
+    const auto& windows = Runtime::windows();
     for (auto it = windows.rbegin(); it != windows.rend(); ++it) {
         const auto& window = *it;
         if (!windowVisibleOnWorkspace(window, WORKSPACE))
@@ -207,9 +209,9 @@ PHLWORKSPACE COverview::ensureWorkspaceForTile(int id) {
     if (image.pWorkspace)
         return image.pWorkspace;
 
-    auto workspace = HyprlandAPI::getWorkspaceByID(image.workspaceID);
+    auto workspace = Runtime::getWorkspaceByID(image.workspaceID);
     if (!workspace)
-        workspace = HyprlandAPI::createNewWorkspace(image.workspaceID, MON->m_id, std::to_string(image.workspaceID), false);
+        workspace = Runtime::createNewWorkspace(image.workspaceID, MON->m_id, std::to_string(image.workspaceID), false);
 
     image.pWorkspace = workspace;
     return workspace;
@@ -239,13 +241,13 @@ bool COverview::finishWindowDrag() {
     if (!isTileValid(SOURCE) || !isTileValid(TARGET) || SOURCE == TARGET)
         return true;
 
-    const auto SOURCEWS = images[SOURCE].pWorkspace ? images[SOURCE].pWorkspace : HyprlandAPI::getWorkspaceByID(images[SOURCE].workspaceID);
+    const auto SOURCEWS = images[SOURCE].pWorkspace ? images[SOURCE].pWorkspace : Runtime::getWorkspaceByID(images[SOURCE].workspaceID);
     const auto TARGETWS = ensureWorkspaceForTile(TARGET);
     if (!windowVisibleOnWorkspace(WINDOW, SOURCEWS) || !TARGETWS || TARGETWS == SOURCEWS)
         return true;
 
     images[SOURCE].pWorkspace = SOURCEWS;
-    HyprlandAPI::moveWindowToWorkspaceSafe(WINDOW, TARGETWS);
+    Runtime::moveWindowToWorkspaceSafe(WINDOW, TARGETWS);
     settleWorkspaceMoveAnimation(WINDOW);
     redrawDraggedWindowTiles(SOURCE, TARGET);
     return true;
@@ -260,7 +262,7 @@ bool COverview::moveWindowBetweenVisibleIndices(size_t sourceIndex, size_t targe
     if (!isTileValid(SOURCE) || !isTileValid(TARGET) || SOURCE == TARGET)
         return false;
 
-    const auto SOURCEWS = images[SOURCE].pWorkspace ? images[SOURCE].pWorkspace : HyprlandAPI::getWorkspaceByID(images[SOURCE].workspaceID);
+    const auto SOURCEWS = images[SOURCE].pWorkspace ? images[SOURCE].pWorkspace : Runtime::getWorkspaceByID(images[SOURCE].workspaceID);
     const auto TARGETWS = ensureWorkspaceForTile(TARGET);
     if (!SOURCEWS || !TARGETWS || SOURCEWS == TARGETWS)
         return false;
@@ -270,7 +272,7 @@ bool COverview::moveWindowBetweenVisibleIndices(size_t sourceIndex, size_t targe
         if (!windowVisibleOnWorkspace(window, SOURCEWS))
             return false;
     } else {
-        const auto& windows = HyprlandAPI::windows();
+        const auto& windows = Runtime::windows();
         for (auto it = windows.rbegin(); it != windows.rend(); ++it) {
             const auto& candidate = *it;
             if (!windowVisibleOnWorkspace(candidate, SOURCEWS))
@@ -285,7 +287,7 @@ bool COverview::moveWindowBetweenVisibleIndices(size_t sourceIndex, size_t targe
         return false;
 
     images[SOURCE].pWorkspace = SOURCEWS;
-    HyprlandAPI::moveWindowToWorkspaceSafe(window, TARGETWS);
+    Runtime::moveWindowToWorkspaceSafe(window, TARGETWS);
     settleWorkspaceMoveAnimation(window);
     redrawDraggedWindowTiles(SOURCE, TARGET);
     return true;
@@ -358,15 +360,15 @@ bool COverview::selectVisibleToken(const std::string& token) {
     if (closing)
         return false;
 
-    static auto* const* PSELECTLABEL = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:selection_label_enable")->getDataStaticPtr();
-    static auto const*  PSELECTMAP   = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:selection_label_token_map")->getDataStaticPtr();
+    const bool PSELECTLABEL = Runtime::configInt("plugin:hyprexpo:selection_label_enable", HyprexpoConfig::SELECTION_LABEL_ENABLE_DEFAULT) != 0;
+    const auto PSELECTMAP   = Runtime::configString("plugin:hyprexpo:selection_label_token_map", HyprexpoConfig::SELECTION_LABEL_TOKEN_MAP_DEFAULT);
 
     const std::string normalized = lowerString(trimString(token));
     if (normalized.empty())
         return false;
 
-    if (**PSELECTLABEL) {
-        const auto tokens = splitCommaList(std::string{*PSELECTMAP});
+    if (PSELECTLABEL) {
+        const auto tokens = splitCommaList(PSELECTMAP);
         for (size_t i = 0; i < tokens.size(); ++i) {
             if (tokens[i].empty() || lowerString(tokens[i]) != normalized)
                 continue;
@@ -392,13 +394,13 @@ void COverview::moveFocus(int dx, int dy) {
     int x = kbFocusID % SIDE_LENGTH;
     int y = kbFocusID / SIDE_LENGTH;
 
-    static auto* const* PWRAPH = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:keynav_wrap_h")->getDataStaticPtr();
-    static auto* const* PWRAPV = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:keynav_wrap_v")->getDataStaticPtr();
+    const bool PWRAPH = Runtime::configInt("plugin:hyprexpo:keynav_wrap_h", HyprexpoConfig::KEYNAV_WRAP_H_DEFAULT) != 0;
+    const bool PWRAPV = Runtime::configInt("plugin:hyprexpo:keynav_wrap_v", HyprexpoConfig::KEYNAV_WRAP_V_DEFAULT) != 0;
 
     if (dx != 0) {
-        static auto* const* PREADING = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:keynav_reading_order")->getDataStaticPtr();
-        int                 step     = dx > 0 ? 1 : -1;
-        if (**PREADING) {
+        const bool PREADING = Runtime::configInt("plugin:hyprexpo:keynav_reading_order", HyprexpoConfig::KEYNAV_READING_ORDER_DEFAULT) != 0;
+        int        step     = dx > 0 ? 1 : -1;
+        if (PREADING) {
             // reading-order scan: proceed linearly across the grid (row-major)
             const int total = SIDE_LENGTH * SIDE_LENGTH;
             int       idx   = kbFocusID;
@@ -406,7 +408,7 @@ void COverview::moveFocus(int dx, int dy) {
                 idx += step;
                 if (idx < 0 || idx >= total) {
                     // wrap only if both wraps are enabled (edge of grid)
-                    if (**PWRAPH && **PWRAPV)
+                    if (PWRAPH && PWRAPV)
                         idx = (idx + total) % total;
                     else
                         break;
@@ -422,7 +424,7 @@ void COverview::moveFocus(int dx, int dy) {
             for (int tries = 0; tries < SIDE_LENGTH; ++tries) {
                 nx += step;
                 if (nx < 0 || nx >= SIDE_LENGTH) {
-                    if (**PWRAPH)
+                    if (PWRAPH)
                         nx = (nx + SIDE_LENGTH) % SIDE_LENGTH;
                     else
                         break;
@@ -442,7 +444,7 @@ void COverview::moveFocus(int dx, int dy) {
         for (int tries = 0; tries < SIDE_LENGTH; ++tries) {
             ny += step;
             if (ny < 0 || ny >= SIDE_LENGTH) {
-                if (**PWRAPV)
+                if (PWRAPV)
                     ny = (ny + SIDE_LENGTH) % SIDE_LENGTH;
                 else
                     break;
@@ -526,7 +528,7 @@ void COverview::onWindowMoveToWorkspace(const PHLWINDOW& window, const PHLWORKSP
 
     externalWorkspaceMoveDuringClose = true;
     damage();
-    HyprlandAPI::scheduleFrameForMonitor(monitor);
+    Runtime::scheduleFrameForMonitor(monitor);
 }
 
 void COverview::resetSwipe() {
@@ -550,8 +552,7 @@ void COverview::onSwipeUpdate(double delta) {
     if (swipeWasCommenced)
         return;
 
-    static auto* const* PDISTANCE = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:gesture_distance")->getDataStaticPtr();
-    const double        distance  = std::max<Hyprlang::INT>(1, **PDISTANCE);
+    const double        distance  = std::max<Config::INTEGER>(1, Runtime::configInt("plugin:hyprexpo:gesture_distance", HyprexpoConfig::GESTURE_DISTANCE_DEFAULT));
 
     const float         PERC               = closing ? std::clamp(delta / distance, 0.0, 1.0) : 1.0 - std::clamp(delta / distance, 0.0, 1.0);
     const auto          WORKSPACE_FOCUS_ID = closing && closeOnID != -1 ? closeOnID : openedID;
@@ -602,17 +603,28 @@ void COverview::onSwipeEnd() {
 }
 
 void COverview::enterSubmapIfEnabled() {
-    static auto* const* PKEYNAV = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:keynav_enable")->getDataStaticPtr();
-    if (**PKEYNAV && !submapActive) {
-        // switch to a dedicated submap for hyprexpo navigation
-        g_pKeybindManager->m_dispatchers["submap"]("hyprexpo");
+    const bool PKEYNAV = Runtime::configInt("plugin:hyprexpo:keynav_enable", HyprexpoConfig::KEYNAV_ENABLE_DEFAULT) != 0;
+    if (PKEYNAV && !submapActive) {
+        previousSubmap = Config::Actions::state()->m_currentSubmap;
+        const auto result = Config::Actions::setSubmap("hyprexpo");
+        if (!result) {
+            previousSubmap.clear();
+            Log::logger->log(Log::ERR, "[hyprexpo] failed to enter hyprexpo submap: {}", result.error().message);
+            return;
+        }
         submapActive = true;
     }
 }
 
 void COverview::resetSubmapIfNeeded() {
     if (submapActive) {
-        g_pKeybindManager->m_dispatchers["submap"]("reset");
+        const auto currentSubmap = Config::Actions::state()->m_currentSubmap;
+        if (currentSubmap == "hyprexpo") {
+            const auto result = Config::Actions::setSubmap(previousSubmap.empty() ? "reset" : previousSubmap);
+            if (!result)
+                Log::logger->log(Log::ERR, "[hyprexpo] failed to restore submap: {}", result.error().message);
+        }
         submapActive = false;
+        previousSubmap.clear();
     }
 }

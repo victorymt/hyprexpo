@@ -48,6 +48,44 @@ class CPinnedWindowPreviewGuard {
     std::vector<SPinnedWindowPreviewState> m_states;
 };
 
+class CMonitorPreviewRenderGuard {
+  public:
+    CMonitorPreviewRenderGuard(PHLMONITOR monitor, CBox& monbox);
+    ~CMonitorPreviewRenderGuard();
+
+    CMonitorPreviewRenderGuard(const CMonitorPreviewRenderGuard&)            = delete;
+    CMonitorPreviewRenderGuard& operator=(const CMonitorPreviewRenderGuard&) = delete;
+
+    bool rotated() const {
+        return m_rotated;
+    }
+
+  private:
+    PHLMONITOR          m_monitor;
+    wl_output_transform m_transform;
+    Vector2D            m_pixelSize;
+    Vector2D            m_transformedSize;
+    bool                m_rotated = false;
+};
+
+class CWorkspacePreviewRenderGuard {
+  public:
+    CWorkspacePreviewRenderGuard(PHLMONITOR monitor, const PHLWORKSPACE& workspace, const PHLWORKSPACE& startedOn, const PHLWORKSPACE& openSpecial);
+    ~CWorkspacePreviewRenderGuard();
+
+    CWorkspacePreviewRenderGuard(const CWorkspacePreviewRenderGuard&)            = delete;
+    CWorkspacePreviewRenderGuard& operator=(const CWorkspacePreviewRenderGuard&) = delete;
+
+  private:
+    PHLMONITOR                                                m_monitor;
+    PHLWORKSPACE                                              m_workspace;
+    PHLWORKSPACE                                              m_startedOn;
+    PHLWORKSPACE                                              m_openSpecial;
+    PHLWORKSPACE                                              m_previousWorkspace;
+    std::vector<std::pair<PHLWORKSPACE, SWorkspacePreviewState>> m_workspaceStates;
+    std::vector<SWindowPreviewState>                          m_windowStates;
+};
+
 void clearWithColor(const CHyprColor& color);
 uint32_t framebufferFormatWithAlpha(uint32_t drmFormat);
 bool isTransformRotated(wl_output_transform t);
@@ -79,4 +117,5 @@ std::vector<SWindowPreviewState> applyWorkspaceWindowGoalState(const PHLWORKSPAC
 void restoreWorkspaceWindowGoalState(const std::vector<SWindowPreviewState>& states);
 PHLWORKSPACE activateWorkspaceForPreview(PHLMONITOR monitor, const PHLWORKSPACE& workspace);
 void restoreActiveWorkspaceAfterPreview(PHLMONITOR monitor, const PHLWORKSPACE& workspace);
+void renderWorkspacePreview(PHLMONITOR monitor, const PHLWORKSPACE& workspace, const PHLWORKSPACE& startedOn, const PHLWORKSPACE& openSpecial, const CBox& monbox);
 void removeOverview(WP<Hyprutils::Animation::CBaseAnimatedVariable> thisptr);

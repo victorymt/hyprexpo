@@ -1,7 +1,5 @@
 #include "Overview.hpp"
-#include <any>
-#include <map>
-#include "HyprlandConfigCompat.hpp"
+#include "HyprexpoRuntime.hpp"
 #include "HyprexpoConfig.hpp"
 #include "OverviewInternal.hpp"
 #include "HyprexpoLogic.hpp"
@@ -44,177 +42,37 @@
 #include <chrono>
 #include <cstdint>
 #include <cmath>
+#include <format>
 #include <string>
 #include <string_view>
+#include <typeinfo>
+#include <utility>
 #include <vector>
 
 using namespace std::chrono_literals;
+namespace Runtime = HyprexpoRuntime;
 
-namespace CompatHyprlandAPI {
-static bool isStringConfig(const std::string& name) {
-    static const std::map<std::string, bool> STRING_CONFIGS = {
-        {"plugin:hyprexpo:workspace_method", true},
-        {"plugin:hyprexpo:border_color", true},
-        {"plugin:hyprexpo:border_color_current", true},
-        {"plugin:hyprexpo:border_color_focus", true},
-        {"plugin:hyprexpo:border_color_hover", true},
-        {"plugin:hyprexpo:border_style", true},
-        {"plugin:hyprexpo:drag_drop_proxy_border_color", true},
-        {"plugin:hyprexpo:drag_drop_source_border_color", true},
-        {"plugin:hyprexpo:label_text_mode", true},
-        {"plugin:hyprexpo:label_token_map", true},
-        {"plugin:hyprexpo:label_position", true},
-        {"plugin:hyprexpo:selection_label_token_map", true},
-        {"plugin:hyprexpo:selection_label_position", true},
-        {"plugin:hyprexpo:label_show", true},
-        {"plugin:hyprexpo:label_bg_shape", true},
-        {"plugin:hyprexpo:label_font_family", true},
-        {"plugin:hyprexpo:cancel_key", true},
-        {"plugin:hyprexpo:animation_bezier", true},
-        {"plugin:hyprexpo:border_grad_current", true},
-        {"plugin:hyprexpo:border_grad_focus", true},
-        {"plugin:hyprexpo:border_grad_hover", true},
-    };
-
-    return STRING_CONFIGS.contains(name);
-}
-
-static bool isFloatConfig(const std::string& name) {
-    return name == "plugin:hyprexpo:tile_rounding_power" ||
-           name == "plugin:hyprexpo:label_scale_hover" ||
-           name == "plugin:hyprexpo:label_scale_focus" ||
-           name == "plugin:hyprexpo:animation_speed";
-}
-
-static Config::STRING stringDefault(const std::string& name) {
-    static const std::map<std::string, Config::STRING> DEFAULTS = {
-        {"plugin:hyprexpo:workspace_method", HyprexpoConfig::WORKSPACE_METHOD_DEFAULT},
-        {"plugin:hyprexpo:border_color", HyprexpoConfig::BORDER_COLOR_DEFAULT},
-        {"plugin:hyprexpo:border_color_current", HyprexpoConfig::BORDER_COLOR_CURRENT_DEFAULT},
-        {"plugin:hyprexpo:border_color_focus", HyprexpoConfig::BORDER_COLOR_FOCUS_DEFAULT},
-        {"plugin:hyprexpo:border_color_hover", HyprexpoConfig::BORDER_COLOR_HOVER_DEFAULT},
-        {"plugin:hyprexpo:border_style", HyprexpoConfig::BORDER_STYLE_DEFAULT},
-        {"plugin:hyprexpo:drag_drop_proxy_border_color", HyprexpoConfig::DRAG_DROP_PROXY_BORDER_COLOR_DEFAULT},
-        {"plugin:hyprexpo:drag_drop_source_border_color", HyprexpoConfig::DRAG_DROP_SOURCE_BORDER_COLOR_DEFAULT},
-        {"plugin:hyprexpo:label_text_mode", HyprexpoConfig::LABEL_TEXT_MODE_DEFAULT},
-        {"plugin:hyprexpo:label_token_map", HyprexpoConfig::LABEL_TOKEN_MAP_DEFAULT},
-        {"plugin:hyprexpo:label_position", HyprexpoConfig::LABEL_POSITION_DEFAULT},
-        {"plugin:hyprexpo:selection_label_token_map", HyprexpoConfig::SELECTION_LABEL_TOKEN_MAP_DEFAULT},
-        {"plugin:hyprexpo:selection_label_position", HyprexpoConfig::SELECTION_LABEL_POSITION_DEFAULT},
-        {"plugin:hyprexpo:label_show", HyprexpoConfig::LABEL_SHOW_DEFAULT},
-        {"plugin:hyprexpo:label_bg_shape", HyprexpoConfig::LABEL_BG_SHAPE_DEFAULT},
-        {"plugin:hyprexpo:label_font_family", HyprexpoConfig::LABEL_FONT_FAMILY_DEFAULT},
-        {"plugin:hyprexpo:cancel_key", HyprexpoConfig::CANCEL_KEY_DEFAULT},
-        {"plugin:hyprexpo:animation_bezier", HyprexpoConfig::ANIMATION_BEZIER_DEFAULT},
-        {"plugin:hyprexpo:border_grad_current", HyprexpoConfig::BORDER_GRAD_CURRENT_DEFAULT},
-        {"plugin:hyprexpo:border_grad_focus", HyprexpoConfig::BORDER_GRAD_FOCUS_DEFAULT},
-        {"plugin:hyprexpo:border_grad_hover", HyprexpoConfig::BORDER_GRAD_HOVER_DEFAULT},
-    };
-
-    if (const auto it = DEFAULTS.find(name); it != DEFAULTS.end())
-        return it->second;
-    return "";
-}
-
-static Config::FLOAT floatDefault(const std::string& name) {
-    if (name == "plugin:hyprexpo:tile_rounding_power")
-        return HyprexpoConfig::TILE_ROUNDING_POWER_DEFAULT;
-    if (name == "plugin:hyprexpo:label_scale_hover")
-        return HyprexpoConfig::LABEL_SCALE_HOVER_DEFAULT;
-    if (name == "plugin:hyprexpo:label_scale_focus")
-        return HyprexpoConfig::LABEL_SCALE_FOCUS_DEFAULT;
-    if (name == "plugin:hyprexpo:animation_speed")
-        return HyprexpoConfig::ANIMATION_SPEED_DEFAULT;
-    return 0.0F;
-}
-
-static Config::INTEGER intDefault(const std::string& name) {
-    static const std::map<std::string, Config::INTEGER> DEFAULTS = {
-        {"plugin:hyprexpo:columns", HyprexpoConfig::COLUMNS_DEFAULT},
-        {"plugin:hyprexpo:gaps_in", HyprexpoConfig::GAPS_IN_DEFAULT},
-        {"plugin:hyprexpo:bg_col", HyprexpoConfig::BG_COL_DEFAULT},
-        {"plugin:hyprexpo:gesture_distance", HyprexpoConfig::GESTURE_DISTANCE_DEFAULT},
-        {"plugin:hyprexpo:show_cursor", HyprexpoConfig::SHOW_CURSOR_DEFAULT},
-        {"plugin:hyprexpo:show_pinned_windows", HyprexpoConfig::SHOW_PINNED_WINDOWS_DEFAULT},
-        {"plugin:hyprexpo:max_workspace", HyprexpoConfig::MAX_WORKSPACE_DEFAULT},
-        {"plugin:hyprexpo:show_workspace_numbers", HyprexpoConfig::SHOW_WORKSPACE_NUMBERS_DEFAULT},
-        {"plugin:hyprexpo:workspace_number_color", HyprexpoConfig::WORKSPACE_NUMBER_COLOR_DEFAULT},
-        {"plugin:hyprexpo:keynav_enable", HyprexpoConfig::KEYNAV_ENABLE_DEFAULT},
-        {"plugin:hyprexpo:border_width", HyprexpoConfig::BORDER_WIDTH_DEFAULT},
-        {"plugin:hyprexpo:drag_drop_proxy_color", HyprexpoConfig::DRAG_DROP_PROXY_COLOR_DEFAULT},
-        {"plugin:hyprexpo:drag_drop_proxy_active_color", HyprexpoConfig::DRAG_DROP_PROXY_ACTIVE_COLOR_DEFAULT},
-        {"plugin:hyprexpo:drag_drop_proxy_border_width", HyprexpoConfig::DRAG_DROP_PROXY_BORDER_WIDTH_DEFAULT},
-        {"plugin:hyprexpo:drag_drop_proxy_rounding", HyprexpoConfig::DRAG_DROP_PROXY_ROUNDING_DEFAULT},
-        {"plugin:hyprexpo:drag_drop_source_border_width", HyprexpoConfig::DRAG_DROP_SOURCE_BORDER_WIDTH_DEFAULT},
-        {"plugin:hyprexpo:label_enable", HyprexpoConfig::LABEL_ENABLE_DEFAULT},
-        {"plugin:hyprexpo:label_color", HyprexpoConfig::LABEL_COLOR_DEFAULT_LEGACY},
-        {"plugin:hyprexpo:label_font_size", HyprexpoConfig::LABEL_FONT_SIZE_DEFAULT},
-        {"plugin:hyprexpo:label_color_default", HyprexpoConfig::LABEL_COLOR_DEFAULT},
-        {"plugin:hyprexpo:label_color_hover", HyprexpoConfig::LABEL_COLOR_HOVER_DEFAULT},
-        {"plugin:hyprexpo:label_color_focus", HyprexpoConfig::LABEL_COLOR_FOCUS_DEFAULT},
-        {"plugin:hyprexpo:label_color_current", HyprexpoConfig::LABEL_COLOR_CURRENT_DEFAULT},
-        {"plugin:hyprexpo:label_bg_enable", HyprexpoConfig::LABEL_BG_ENABLE_DEFAULT},
-        {"plugin:hyprexpo:label_bg_color", HyprexpoConfig::LABEL_BG_COLOR_DEFAULT},
-        {"plugin:hyprexpo:label_bg_rounding", HyprexpoConfig::LABEL_BG_ROUNDING_DEFAULT},
-        {"plugin:hyprexpo:label_padding", HyprexpoConfig::LABEL_PADDING_DEFAULT},
-        {"plugin:hyprexpo:label_pixel_snap", HyprexpoConfig::LABEL_PIXEL_SNAP_DEFAULT},
-        {"plugin:hyprexpo:selection_label_enable", HyprexpoConfig::SELECTION_LABEL_ENABLE_DEFAULT},
-        {"plugin:hyprexpo:selection_label_offset_x", HyprexpoConfig::SELECTION_LABEL_OFFSET_X_DEFAULT},
-        {"plugin:hyprexpo:selection_label_offset_y", HyprexpoConfig::SELECTION_LABEL_OFFSET_Y_DEFAULT},
-        {"plugin:hyprexpo:selection_label_color", HyprexpoConfig::SELECTION_LABEL_COLOR_DEFAULT},
-        {"plugin:hyprexpo:keynav_wrap_h", HyprexpoConfig::KEYNAV_WRAP_H_DEFAULT},
-        {"plugin:hyprexpo:keynav_wrap_v", HyprexpoConfig::KEYNAV_WRAP_V_DEFAULT},
-        {"plugin:hyprexpo:gaps_out", HyprexpoConfig::GAPS_OUT_DEFAULT},
-        {"plugin:hyprexpo:keynav_reading_order", HyprexpoConfig::KEYNAV_READING_ORDER_DEFAULT},
-        {"plugin:hyprexpo:tile_rounding", HyprexpoConfig::TILE_ROUNDING_DEFAULT},
-        {"plugin:hyprexpo:tile_rounding_focus", HyprexpoConfig::TILE_ROUNDING_FOCUS_DEFAULT},
-        {"plugin:hyprexpo:tile_rounding_current", HyprexpoConfig::TILE_ROUNDING_CURRENT_DEFAULT},
-        {"plugin:hyprexpo:tile_rounding_hover", HyprexpoConfig::TILE_ROUNDING_HOVER_DEFAULT},
-        {"plugin:hyprexpo:label_offset_x", HyprexpoConfig::LABEL_OFFSET_X_DEFAULT},
-        {"plugin:hyprexpo:label_offset_y", HyprexpoConfig::LABEL_OFFSET_Y_DEFAULT},
-        {"plugin:hyprexpo:label_font_bold", HyprexpoConfig::LABEL_FONT_BOLD_DEFAULT},
-        {"plugin:hyprexpo:label_font_italic", HyprexpoConfig::LABEL_FONT_ITALIC_DEFAULT},
-        {"plugin:hyprexpo:label_text_underline", HyprexpoConfig::LABEL_TEXT_UNDERLINE_DEFAULT},
-        {"plugin:hyprexpo:label_text_strikethrough", HyprexpoConfig::LABEL_TEXT_STRIKETHROUGH_DEFAULT},
-        {"plugin:hyprexpo:label_center_adjust_x", HyprexpoConfig::LABEL_CENTER_ADJUST_X_DEFAULT},
-        {"plugin:hyprexpo:label_center_adjust_y", HyprexpoConfig::LABEL_CENTER_ADJUST_Y_DEFAULT},
-    };
-
-    if (const auto it = DEFAULTS.find(name); it != DEFAULTS.end())
-        return it->second;
-    return 0;
-}
-
-SConfigValueCompat* getConfigValue(HANDLE, const std::string& name) {
-    static std::map<std::string, SConfigValueCompat> VALUES;
-    auto& compat = VALUES[name];
-
-    if (isStringConfig(name)) {
-        compat.string = stringDefault(name);
-        compat.ptr = &compat.string;
-    } else if (isFloatConfig(name)) {
-        compat.floating = floatDefault(name);
-        compat.floatingPtr = &compat.floating;
-        compat.ptr = &compat.floatingPtr;
-    } else {
-        compat.integer = intDefault(name);
-        compat.integerPtr = &compat.integer;
-        compat.ptr = &compat.integerPtr;
-    }
-
+namespace HyprexpoRuntime {
+template <typename T>
+static T configValue(const std::string& name, T fallback) {
     const auto VALUE = Config::mgr()->getConfigValue(name);
-    if (VALUE.dataptr && VALUE.type && *VALUE.type == typeid(Config::STRING)) {
-        auto* ptr = reinterpret_cast<Config::STRING* const*>(VALUE.dataptr);
-        compat.ptr = ptr && *ptr ? *ptr : &compat.string;
-        return &compat;
-    }
+    if (!VALUE.dataptr || !VALUE.type || *VALUE.type != typeid(T))
+        return fallback;
 
-    if (VALUE.dataptr) {
-        compat.ptr = const_cast<void*>(static_cast<const void*>(VALUE.dataptr));
-        return &compat;
-    }
+    const auto PTR = reinterpret_cast<T* const*>(VALUE.dataptr);
+    return PTR && *PTR ? **PTR : fallback;
+}
 
-    return &compat;
+Config::INTEGER configInt(const std::string& name, Config::INTEGER fallback) {
+    return configValue<Config::INTEGER>(name, fallback);
+}
+
+Config::FLOAT configFloat(const std::string& name, Config::FLOAT fallback) {
+    return configValue<Config::FLOAT>(name, fallback);
+}
+
+Config::STRING configString(const std::string& name, Config::STRING fallback) {
+    return configValue<Config::STRING>(name, std::move(fallback));
 }
 
 PHLMONITOR getMonitorFromCursor() {
@@ -254,8 +112,12 @@ void scheduleFrameForMonitor(const PHLMONITOR& monitor) {
         monitor->scheduleFrame();
 }
 
-PHLWINDOW getWindowByAddress(const std::string& address) {
-    std::string_view value = address;
+std::string windowAddressSelector(const PHLWINDOW& window) {
+    return window ? std::format("address:0x{:x}", reinterpret_cast<uintptr_t>(window.get())) : "";
+}
+
+PHLWINDOW getWindowByAddressSelector(const std::string& selector) {
+    std::string_view value = selector;
     constexpr std::string_view PREFIX = "address:";
     if (value.starts_with(PREFIX))
         value.remove_prefix(PREFIX.size());
@@ -268,7 +130,7 @@ PHLWINDOW getWindowByAddress(const std::string& address) {
         return nullptr;
 
     for (const auto& window : windows()) {
-        if (window && reinterpret_cast<uintptr_t>(window.get()) == parsed)
+        if (window && window->m_isMapped && reinterpret_cast<uintptr_t>(window.get()) == parsed)
             return window;
     }
 
@@ -276,16 +138,12 @@ PHLWINDOW getWindowByAddress(const std::string& address) {
 }
 }
 
-#define HyprlandAPI CompatHyprlandAPI
-
 static SP<Hyprutils::Animation::SAnimationPropertyConfig> overviewAnimationConfig() {
     static auto config = makeShared<Hyprutils::Animation::SAnimationPropertyConfig>();
-    static auto* const* PSPEED = (Hyprlang::FLOAT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:animation_speed")->getDataStaticPtr();
-    static auto const* PBEZIER = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:animation_bezier")->getDataStaticPtr();
 
     config->internalEnabled = 1;
-    config->internalSpeed   = std::max<Hyprlang::FLOAT>(0.0F, **PSPEED);
-    config->internalBezier  = *PBEZIER;
+    config->internalSpeed   = std::max<Config::FLOAT>(0.0F, Runtime::configFloat("plugin:hyprexpo:animation_speed", HyprexpoConfig::ANIMATION_SPEED_DEFAULT));
+    config->internalBezier  = Runtime::configString("plugin:hyprexpo:animation_bezier", HyprexpoConfig::ANIMATION_BEZIER_DEFAULT);
     config->internalStyle   = "";
     config->overridden      = true;
     config->pValues         = config;
@@ -359,25 +217,25 @@ SP<Render::ITexture> renderNumberTexture(const std::string& text, const CHyprCol
     pango_layout_set_text(layout, text.c_str(), -1);
 
     // font options from config
-    static auto* const PFONTFAM = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:label_font_family")->getDataStaticPtr();
-    static auto* const PFONTB   = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:label_font_bold")->getDataStaticPtr();
-    static auto* const PFONTI   = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:label_font_italic")->getDataStaticPtr();
-    static auto* const PTUNDER  = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:label_text_underline")->getDataStaticPtr();
-    static auto* const PTSTRIKE = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:label_text_strikethrough")->getDataStaticPtr();
+    const auto fontFamily = Runtime::configString("plugin:hyprexpo:label_font_family", HyprexpoConfig::LABEL_FONT_FAMILY_DEFAULT);
+    const bool fontBold   = Runtime::configInt("plugin:hyprexpo:label_font_bold", HyprexpoConfig::LABEL_FONT_BOLD_DEFAULT) != 0;
+    const bool fontItalic = Runtime::configInt("plugin:hyprexpo:label_font_italic", HyprexpoConfig::LABEL_FONT_ITALIC_DEFAULT) != 0;
+    const bool underline  = Runtime::configInt("plugin:hyprexpo:label_text_underline", HyprexpoConfig::LABEL_TEXT_UNDERLINE_DEFAULT) != 0;
+    const bool strike     = Runtime::configInt("plugin:hyprexpo:label_text_strikethrough", HyprexpoConfig::LABEL_TEXT_STRIKETHROUGH_DEFAULT) != 0;
 
-    PangoFontDescription* fontDesc = pango_font_description_from_string(*PFONTFAM);
+    PangoFontDescription* fontDesc = pango_font_description_from_string(fontFamily.c_str());
     pango_font_description_set_size(fontDesc, fontSize * scale * PANGO_SCALE);
-    pango_font_description_set_weight(fontDesc, **PFONTB ? PANGO_WEIGHT_BOLD : PANGO_WEIGHT_NORMAL);
-    pango_font_description_set_style(fontDesc, **PFONTI ? PANGO_STYLE_ITALIC : PANGO_STYLE_NORMAL);
+    pango_font_description_set_weight(fontDesc, fontBold ? PANGO_WEIGHT_BOLD : PANGO_WEIGHT_NORMAL);
+    pango_font_description_set_style(fontDesc, fontItalic ? PANGO_STYLE_ITALIC : PANGO_STYLE_NORMAL);
     pango_layout_set_font_description(layout, fontDesc);
     pango_font_description_free(fontDesc);
 
-    if (**PTUNDER || **PTSTRIKE) {
+    if (underline || strike) {
         PangoAttrList* attrs = pango_attr_list_new();
-        if (**PTUNDER) {
+        if (underline) {
             pango_attr_list_insert(attrs, pango_attr_underline_new(PANGO_UNDERLINE_SINGLE));
         }
-        if (**PTSTRIKE) {
+        if (strike) {
             pango_attr_list_insert(attrs, pango_attr_strikethrough_new(TRUE));
         }
         pango_layout_set_attributes(layout, attrs);
@@ -397,10 +255,10 @@ SP<Render::ITexture> renderNumberTexture(const std::string& text, const CHyprCol
     const int    inkH   = std::max(0, ink_rect.height / PANGO_SCALE);
     const int    inkX   = ink_rect.x / PANGO_SCALE; // can be negative
     const int    inkY   = ink_rect.y / PANGO_SCALE; // can be negative
-    static auto* const* PCENTERADJX = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:label_center_adjust_x")->getDataStaticPtr();
-    static auto* const* PCENTERADJY = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:label_center_adjust_y")->getDataStaticPtr();
-    const double xOffset = (bufferSize.x - inkW) / 2.0 - inkX + **PCENTERADJX;
-    const double yOffset = (bufferSize.y - inkH) / 2.0 - inkY + **PCENTERADJY;
+    const auto centerAdjustX = Runtime::configInt("plugin:hyprexpo:label_center_adjust_x", HyprexpoConfig::LABEL_CENTER_ADJUST_X_DEFAULT);
+    const auto centerAdjustY = Runtime::configInt("plugin:hyprexpo:label_center_adjust_y", HyprexpoConfig::LABEL_CENTER_ADJUST_Y_DEFAULT);
+    const double xOffset = (bufferSize.x - inkW) / 2.0 - inkX + centerAdjustX;
+    const double yOffset = (bufferSize.y - inkH) / 2.0 - inkY + centerAdjustY;
 
     cairo_move_to(CAIRO, xOffset, yOffset);
     pango_cairo_show_layout(CAIRO, layout);
@@ -461,7 +319,7 @@ void restoreWorkspacePreviewState(const PHLWORKSPACE& workspace, const SWorkspac
 std::vector<std::pair<PHLWORKSPACE, SWorkspacePreviewState>> applyExclusiveWorkspacePreviewState(const PHLWORKSPACE& targetWorkspace) {
     std::vector<std::pair<PHLWORKSPACE, SWorkspacePreviewState>> states;
 
-    for (const auto& workspaceRef : HyprlandAPI::workspaceRefs()) {
+    for (const auto& workspaceRef : Runtime::workspaceRefs()) {
         const auto workspace = workspaceRef.lock();
         if (!workspace)
             continue;
@@ -506,7 +364,7 @@ void normalizeMonitorWorkspaceRenderState(PHLMONITOR monitor) {
     if (!monitor || !monitor->m_activeWorkspace)
         return;
 
-    for (const auto& workspaceRef : HyprlandAPI::workspaceRefs()) {
+    for (const auto& workspaceRef : Runtime::workspaceRefs()) {
         const auto workspace = workspaceRef.lock();
         if (!workspace || workspace->m_monitor != monitor || workspace->m_isSpecialWorkspace)
             continue;
@@ -522,7 +380,7 @@ void normalizeMonitorWorkspaceRenderState(PHLMONITOR monitor) {
         }
     }
 
-    for (const auto& window : HyprlandAPI::windows()) {
+    for (const auto& window : Runtime::windows()) {
         if (!window || !window->m_isMapped || window->isHidden() || window->m_pinned || !window->m_workspace || window->m_workspace->m_monitor != monitor)
             continue;
 
@@ -532,8 +390,7 @@ void normalizeMonitorWorkspaceRenderState(PHLMONITOR monitor) {
 }
 
 bool showPinnedWindowsInPreview() {
-    static auto* const* PSHOWPINNED = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:show_pinned_windows")->getDataStaticPtr();
-    return **PSHOWPINNED != 0;
+    return Runtime::configInt("plugin:hyprexpo:show_pinned_windows", HyprexpoConfig::SHOW_PINNED_WINDOWS_DEFAULT) != 0;
 }
 
 std::vector<SPinnedWindowPreviewState> applyPinnedWindowPreviewState(bool showPinnedWindows) {
@@ -541,7 +398,7 @@ std::vector<SPinnedWindowPreviewState> applyPinnedWindowPreviewState(bool showPi
     if (showPinnedWindows)
         return states;
 
-    for (const auto& window : HyprlandAPI::windows()) {
+    for (const auto& window : Runtime::windows()) {
         if (!window || !window->m_isMapped || !window->m_pinned)
             continue;
 
@@ -574,6 +431,68 @@ CPinnedWindowPreviewGuard::~CPinnedWindowPreviewGuard() {
     restorePinnedWindowPreviewState(m_states);
 }
 
+CMonitorPreviewRenderGuard::CMonitorPreviewRenderGuard(PHLMONITOR monitor, CBox& monbox) : m_monitor(monitor) {
+    if (!m_monitor)
+        return;
+
+    m_transform       = m_monitor->m_transform;
+    m_pixelSize       = m_monitor->m_pixelSize;
+    m_transformedSize = m_monitor->m_transformedSize;
+    m_rotated         = isTransformRotated(m_transform);
+
+    if (!m_rotated)
+        return;
+
+    monbox = {{0, 0}, {monbox.h, monbox.w}};
+    m_monitor->m_transform       = WL_OUTPUT_TRANSFORM_NORMAL;
+    m_monitor->m_pixelSize       = {monbox.w, monbox.h};
+    m_monitor->m_transformedSize = {monbox.w, monbox.h};
+}
+
+CMonitorPreviewRenderGuard::~CMonitorPreviewRenderGuard() {
+    if (!m_monitor)
+        return;
+
+    m_monitor->m_transform       = m_transform;
+    m_monitor->m_pixelSize       = m_pixelSize;
+    m_monitor->m_transformedSize = m_transformedSize;
+}
+
+CWorkspacePreviewRenderGuard::CWorkspacePreviewRenderGuard(PHLMONITOR monitor, const PHLWORKSPACE& workspace, const PHLWORKSPACE& startedOn, const PHLWORKSPACE& openSpecial) :
+    m_monitor(monitor), m_workspace(workspace), m_startedOn(startedOn), m_openSpecial(openSpecial) {
+    if (!m_monitor || !m_workspace)
+        return;
+
+    m_previousWorkspace = activateWorkspaceForPreview(m_monitor, m_workspace);
+    m_workspaceStates   = applyExclusiveWorkspacePreviewState(m_workspace);
+    if (m_workspace != m_startedOn)
+        m_windowStates = applyWorkspaceWindowGoalState(m_workspace);
+
+    if (m_workspace == m_startedOn)
+        m_monitor->m_activeSpecialWorkspace = m_openSpecial;
+}
+
+CWorkspacePreviewRenderGuard::~CWorkspacePreviewRenderGuard() {
+    restoreWorkspaceWindowGoalState(m_windowStates);
+    restoreWorkspacePreviewStates(m_workspaceStates);
+    restoreActiveWorkspaceAfterPreview(m_monitor, m_previousWorkspace);
+
+    if (m_monitor && m_workspace == m_startedOn)
+        m_monitor->m_activeSpecialWorkspace.reset();
+}
+
+void renderWorkspacePreview(PHLMONITOR monitor, const PHLWORKSPACE& workspace, const PHLWORKSPACE& startedOn, const PHLWORKSPACE& openSpecial, const CBox& monbox) {
+    if (workspace) {
+        CWorkspacePreviewRenderGuard workspaceGuard{monitor, workspace, startedOn, openSpecial};
+        CPinnedWindowPreviewGuard    pinnedWindowGuard{showPinnedWindowsInPreview()};
+        g_pHyprRenderer->renderWorkspace(monitor, workspace, Time::steadyNow(), monbox);
+        return;
+    }
+
+    CPinnedWindowPreviewGuard pinnedWindowGuard{showPinnedWindowsInPreview()};
+    g_pHyprRenderer->renderWorkspace(monitor, workspace, Time::steadyNow(), monbox);
+}
+
 bool windowVisibleOnWorkspace(const PHLWINDOW& window, const PHLWORKSPACE& workspace) {
     return window && workspace && window->m_workspace == workspace && window->m_isMapped && !window->isHidden() && !window->m_pinned;
 }
@@ -591,7 +510,7 @@ void settleWorkspaceMoveAnimation(const PHLWINDOW& window) {
 }
 
 void settleWorkspaceMoveAnimations() {
-    for (const auto& window : HyprlandAPI::windows()) {
+    for (const auto& window : Runtime::windows()) {
         if (!window)
             continue;
 
@@ -619,7 +538,7 @@ std::vector<SWindowPreviewState> applyWorkspaceWindowGoalState(const PHLWORKSPAC
     if (!workspace)
         return states;
 
-    for (const auto& window : HyprlandAPI::windows()) {
+    for (const auto& window : Runtime::windows()) {
         if (!windowVisibleOnWorkspace(window, workspace))
             continue;
 
@@ -694,12 +613,11 @@ void removeOverview(WP<Hyprutils::Animation::CBaseAnimatedVariable> thisptr) {
     // Force one normal compositor frame after the overview pass is removed.
     // Idle/empty workspaces may not produce their own damage immediately.
     g_pHyprRenderer->damageMonitor(MON);
-    HyprlandAPI::scheduleFrameForMonitor(MON);
+    Runtime::scheduleFrameForMonitor(MON);
 }
 
 static bool shouldShowCursorDuringOverview() {
-    static auto* const* PSHOWCURSOR = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:show_cursor")->getDataStaticPtr();
-    return **PSHOWCURSOR;
+    return Runtime::configInt("plugin:hyprexpo:show_cursor", HyprexpoConfig::SHOW_CURSOR_DEFAULT) != 0;
 }
 
 static void ensureOverviewCursorVisible(bool forceOverviewShape = false, bool refreshPosition = false) {
@@ -716,10 +634,8 @@ static void ensureOverviewCursorVisible(bool forceOverviewShape = false, bool re
 // Get workspace method configuration for a specific monitor
 // Returns pair of {isCenter, startWorkspaceID}
 static std::pair<bool, int> getWorkspaceMethodForMonitor(PHLMONITOR monitor) {
-    static auto const* PMETHOD = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:workspace_method")->getDataStaticPtr();
-
     const std::string monitorName = monitor->m_name;
-    const std::string configStr = std::string{*PMETHOD};
+    const std::string configStr = Runtime::configString("plugin:hyprexpo:workspace_method", HyprexpoConfig::WORKSPACE_METHOD_DEFAULT);
     const auto        parsed = Hyprexpo::resolveWorkspaceMethodForMonitor(configStr, monitorName);
 
     int methodStartID = monitor->activeWorkspaceID();
@@ -751,20 +667,17 @@ COverview::~COverview() {
 }
 
 COverview::COverview(PHLWORKSPACE startedOn_, bool swipe_) : startedOn(startedOn_), swipe(swipe_) {
-    const auto PMONITOR = HyprlandAPI::getMonitorFromCursor();
+    const auto PMONITOR = Runtime::getMonitorFromCursor();
     pMonitor            = PMONITOR;
 
-    static auto* const* PCOLUMNS = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:columns")->getDataStaticPtr();
-    static auto* const* PGAPS    = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:gaps_in")->getDataStaticPtr();
-    static auto* const* PCOL     = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:bg_col")->getDataStaticPtr();
-    static auto* const* PSKIP    = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:skip_empty")->getDataStaticPtr();
-    static auto* const* PMAXWS   = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:max_workspace")->getDataStaticPtr();
-    static auto* const* PSHOWNUM = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:show_workspace_numbers")->getDataStaticPtr();
+    const auto columns = Runtime::configInt("plugin:hyprexpo:columns", HyprexpoConfig::COLUMNS_DEFAULT);
+    const auto gaps    = Runtime::configInt("plugin:hyprexpo:gaps_in", HyprexpoConfig::GAPS_IN_DEFAULT);
+    const auto bgColor = Runtime::configInt("plugin:hyprexpo:bg_col", HyprexpoConfig::BG_COL_DEFAULT);
 
-    SIDE_LENGTH          = Hyprexpo::clampGridColumns(**PCOLUMNS);
-    GAP_WIDTH            = std::max<Hyprlang::INT>(0, **PGAPS);
-    BG_COLOR             = **PCOL;
-    showWorkspaceNumbers = **PSHOWNUM;
+    SIDE_LENGTH          = Hyprexpo::clampGridColumns(columns);
+    GAP_WIDTH            = std::max<Config::INTEGER>(0, gaps);
+    BG_COLOR             = bgColor;
+    showWorkspaceNumbers = Runtime::configInt("plugin:hyprexpo:show_workspace_numbers", HyprexpoConfig::SHOW_WORKSPACE_NUMBERS_DEFAULT) != 0;
 
     // Get workspace method for this specific monitor
     auto [methodCenter, methodStartID] = getWorkspaceMethodForMonitor(pMonitor.lock());
@@ -772,8 +685,8 @@ COverview::COverview(PHLWORKSPACE startedOn_, bool swipe_) : startedOn(startedOn
     images.resize(SIDE_LENGTH * SIDE_LENGTH);
 
     // r includes empty workspaces; m skips over them
-    const bool    skipEmpty    = **PSKIP;
-    const int64_t maxWorkspace = std::max<Hyprlang::INT>(0, **PMAXWS);
+    const bool    skipEmpty    = Runtime::configInt("plugin:hyprexpo:skip_empty", HyprexpoConfig::SKIP_EMPTY_DEFAULT) != 0;
+    const int64_t maxWorkspace = std::max<Config::INTEGER>(0, Runtime::configInt("plugin:hyprexpo:max_workspace", HyprexpoConfig::MAX_WORKSPACE_DEFAULT));
     std::string   selector     = skipEmpty ? "m" : "r";
 
     if (!skipEmpty && maxWorkspace > 0) {
@@ -827,7 +740,7 @@ COverview::COverview(PHLWORKSPACE startedOn_, bool swipe_) : startedOn(startedOn
         int currentID         = methodStartID;
         images[0].workspaceID = currentID;
 
-        auto PWORKSPACESTART = HyprlandAPI::getWorkspaceByID(currentID);
+        auto PWORKSPACESTART = Runtime::getWorkspaceByID(currentID);
         if (!PWORKSPACESTART)
             PWORKSPACESTART = CWorkspace::create(currentID, pMonitor.lock(), std::to_string(currentID));
 
@@ -858,25 +771,7 @@ COverview::COverview(PHLWORKSPACE startedOn_, bool swipe_) : startedOn(startedOn
 
     int          currentid = 0;
 
-    // Temporarily disable monitor rotation during framebuffer capture so
-    // workspace content renders in the logical (portrait) orientation
-    // rather than the physical panel orientation.
-    const auto savedTransform       = pMonitor->m_transform;
-    const auto savedTransformedSize = pMonitor->m_transformedSize;
-    const auto savedPixelSize       = pMonitor->m_pixelSize;
-
-    // Fix for rotated monitors: m_pixelSize contains physical panel dimensions
-    // (landscape), but we need logical portrait dimensions for the framebuffer
-    if (isTransformRotated(savedTransform)) {
-        // Swap monbox dimensions to match logical orientation
-        monbox = {{0, 0}, {monbox.h, monbox.w}};
-
-        // Override monitor state: disable rotation and set all size fields to
-        // portrait dimensions so beginRender sets up the viewport correctly
-        pMonitor->m_transform       = WL_OUTPUT_TRANSFORM_NORMAL;
-        pMonitor->m_pixelSize       = {monbox.w, monbox.h};
-        pMonitor->m_transformedSize = {monbox.w, monbox.h};
-    }
+    CMonitorPreviewRenderGuard monitorGuard{pMonitor.lock(), monbox};
 
     PHLWORKSPACE openSpecial = PMONITOR->m_activeSpecialWorkspace;
     if (openSpecial)
@@ -896,35 +791,17 @@ COverview::COverview(PHLWORKSPACE startedOn_, bool swipe_) : startedOn(startedOn
 
         clearWithColor(CHyprColor{0, 0, 0, 1.0});
 
-        const auto PWORKSPACE = HyprlandAPI::getWorkspaceByID(image.workspaceID);
+        const auto PWORKSPACE = Runtime::getWorkspaceByID(image.workspaceID);
 
         if (PWORKSPACE == startedOn)
             currentid = i;
 
         if (PWORKSPACE) {
-            image.pWorkspace        = PWORKSPACE;
-            const auto previousWS    = activateWorkspaceForPreview(PMONITOR, PWORKSPACE);
-            const auto previewStates = applyExclusiveWorkspacePreviewState(PWORKSPACE);
-            const auto windowState   = PWORKSPACE == startedOn ? std::vector<SWindowPreviewState>{} : applyWorkspaceWindowGoalState(PWORKSPACE);
-
-            if (PWORKSPACE == startedOn)
-                PMONITOR->m_activeSpecialWorkspace = openSpecial;
-
-            {
-                CPinnedWindowPreviewGuard pinnedWindowPreviewGuard{showPinnedWindowsInPreview()};
-                g_pHyprRenderer->renderWorkspace(PMONITOR, PWORKSPACE, Time::steadyNow(), monbox);
-            }
-
-            restoreWorkspaceWindowGoalState(windowState);
-            restoreWorkspacePreviewStates(previewStates);
-            restoreActiveWorkspaceAfterPreview(PMONITOR, previousWS);
+            image.pWorkspace = PWORKSPACE;
+            renderWorkspacePreview(PMONITOR, PWORKSPACE, startedOn, openSpecial, monbox);
             startedOn->m_visible = false;
-
-            if (PWORKSPACE == startedOn)
-                PMONITOR->m_activeSpecialWorkspace.reset();
         } else {
-            CPinnedWindowPreviewGuard pinnedWindowPreviewGuard{showPinnedWindowsInPreview()};
-            g_pHyprRenderer->renderWorkspace(PMONITOR, PWORKSPACE, Time::steadyNow(), monbox);
+            renderWorkspacePreview(PMONITOR, PWORKSPACE, startedOn, openSpecial, monbox);
         }
 
         image.box = {(i % SIDE_LENGTH) * tileRenderSize.x + (i % SIDE_LENGTH) * GAP_WIDTH, (i / SIDE_LENGTH) * tileRenderSize.y + (i / SIDE_LENGTH) * GAP_WIDTH, tileRenderSize.x,
@@ -935,15 +812,10 @@ COverview::COverview(PHLWORKSPACE startedOn_, bool swipe_) : startedOn(startedOn
 
         // Capture normalizes rotated monitor geometry; Hyprland's output path adds one more half-turn.
         if (const auto texture = image.fb->getTexture(); texture)
-            texture->m_transform = isTransformRotated(savedTransform) ? HYPRUTILS_TRANSFORM_180 : HYPRUTILS_TRANSFORM_NORMAL;
+            texture->m_transform = monitorGuard.rotated() ? HYPRUTILS_TRANSFORM_180 : HYPRUTILS_TRANSFORM_NORMAL;
     }
 
     g_pHyprRenderer->m_bBlockSurfaceFeedback = false;
-
-    // Restore the original monitor state after capture
-    pMonitor->m_transform       = savedTransform;
-    pMonitor->m_pixelSize       = savedPixelSize;
-    pMonitor->m_transformedSize = savedTransformedSize;
 
     PMONITOR->m_activeSpecialWorkspace = openSpecial;
     PMONITOR->m_activeWorkspace        = startedOn;

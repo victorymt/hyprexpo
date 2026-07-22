@@ -3,7 +3,7 @@
 #include "Dispatchers.hpp"
 
 #include "ExpoGesture.hpp"
-#include "HyprlandConfigCompat.hpp"
+#include "HyprexpoRuntime.hpp"
 #include "HyprexpoConfig.hpp"
 #include "Overview.hpp"
 #include <hyprland/src/Compositor.hpp>
@@ -28,6 +28,7 @@
 static bool g_unloading         = false;
 static bool renderingOverview   = false;
 static SP<Config::Values::CStringValue> g_pCancelKeyConfig;
+namespace Runtime = HyprexpoRuntime;
 
 static SDispatchResult onExpoDispatcher(std::string arg);
 static SDispatchResult onKbFocusDispatcher(std::string arg);
@@ -125,7 +126,7 @@ static PHLWINDOW windowToBringFromWorkspace(const PHLWORKSPACE& workspace) {
     if (!workspace)
         return nullptr;
 
-    const auto& windows = CompatHyprlandAPI::windows();
+    const auto& windows = Runtime::windows();
     for (auto it = windows.rbegin(); it != windows.rend(); ++it) {
         const auto& window = *it;
         if (!window || window->m_workspace != workspace || !window->m_isMapped || window->isHidden())
@@ -142,14 +143,14 @@ static SDispatchResult bringWindowFromWorkspace(int64_t sourceWorkspaceID) {
         return {.success = false, .error = "selected workspace is empty"};
 
     const auto focusState = Desktop::focusState();
-    const auto monitor    = focusState ? focusState->monitor() : CompatHyprlandAPI::getMonitorFromCursor();
+    const auto monitor    = focusState ? focusState->monitor() : Runtime::getMonitorFromCursor();
     if (!monitor || !monitor->m_activeWorkspace)
         return {.success = false, .error = "no active monitor/workspace"};
 
     if (sourceWorkspaceID == monitor->activeWorkspaceID())
         return {};
 
-    const auto sourceWorkspace = CompatHyprlandAPI::getWorkspaceByID(sourceWorkspaceID);
+    const auto sourceWorkspace = Runtime::getWorkspaceByID(sourceWorkspaceID);
     if (!sourceWorkspace)
         return {.success = false, .error = "selected workspace is not open"};
 
@@ -157,10 +158,10 @@ static SDispatchResult bringWindowFromWorkspace(int64_t sourceWorkspaceID) {
     if (!window)
         return {.success = false, .error = "selected workspace has no mapped windows"};
 
-    CompatHyprlandAPI::moveWindowToWorkspaceSafe(window, monitor->m_activeWorkspace);
+    Runtime::moveWindowToWorkspaceSafe(window, monitor->m_activeWorkspace);
     if (focusState)
         focusState->fullWindowFocus(window, Desktop::FOCUS_REASON_KEYBIND);
-    CompatHyprlandAPI::warpCursorTo(window->middle());
+    Runtime::warpCursorTo(window->middle());
     return {};
 }
 
@@ -428,7 +429,7 @@ static SDispatchResult onExpoDispatcher(std::string arg) {
         if (g_pOverview)
             g_pOverview->close();
         else {
-            const auto PMONITOR = CompatHyprlandAPI::getMonitorFromCursor();
+            const auto PMONITOR = Runtime::getMonitorFromCursor();
             if (!PMONITOR)
                 return {};
             renderingOverview = true;
@@ -453,7 +454,7 @@ static SDispatchResult onExpoDispatcher(std::string arg) {
     if (g_pOverview)
         return {};
 
-    const auto PMONITOR = CompatHyprlandAPI::getMonitorFromCursor();
+    const auto PMONITOR = Runtime::getMonitorFromCursor();
     if (!PMONITOR)
         return {};
 
@@ -575,7 +576,7 @@ static SDispatchResult onMovePreviewWindowDispatcher(std::string arg) {
         if (!windowAddress.starts_with("address:"))
             windowAddress = "address:" + windowAddress;
 
-        window = CompatHyprlandAPI::getWindowByAddress(windowAddress);
+        window = Runtime::getWindowByAddressSelector(windowAddress);
         if (!window)
             return {.success = false, .error = "window address did not match a mapped window"};
     }

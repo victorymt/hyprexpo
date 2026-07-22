@@ -57,7 +57,7 @@ int main() {
     const auto lockPos     = function.find("const auto MON = g_pOverview->pMonitor.lock();");
     const auto resetPos    = function.find("g_pOverview.reset();");
     const auto damagePos   = function.find("g_pHyprRenderer->damageMonitor(MON);");
-    const auto schedulePos = function.find("HyprlandAPI::scheduleFrameForMonitor(MON);");
+    const auto schedulePos = function.find("Runtime::scheduleFrameForMonitor(MON);");
 
     expect(lockPos != std::string::npos, "removeOverview captures monitor before teardown");
     expect(resetPos != std::string::npos, "removeOverview destroys active overview");
