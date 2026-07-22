@@ -1,9 +1,10 @@
 #include "ExpoGesture.hpp"
 
+#include "HyprlandConfigCompat.hpp"
 #include "Overview.hpp"
 
 #include <hyprland/src/Compositor.hpp>
-#include <hyprland/src/helpers/Monitor.hpp>
+#include <hyprland/src/output/Monitor.hpp>
 
 void CExpoGesture::begin(const ITrackpadGesture::STrackpadGestureBegin& e) {
     ITrackpadGesture::begin(e);
@@ -11,7 +12,7 @@ void CExpoGesture::begin(const ITrackpadGesture::STrackpadGestureBegin& e) {
     m_lastDelta   = 0.F;
     m_firstUpdate = true;
 
-    const auto monitor = g_pCompositor->getMonitorFromCursor();
+    const auto monitor = CompatHyprlandAPI::getMonitorFromCursor();
     if (!monitor || !monitor->m_activeWorkspace)
         return;
 

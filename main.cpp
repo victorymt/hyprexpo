@@ -3,6 +3,8 @@
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/config/ConfigManager.hpp>
 #include <hyprland/src/desktop/DesktopTypes.hpp>
+#include <hyprland/src/helpers/time/Time.hpp>
+#include <hyprland/src/output/Monitor.hpp>
 #include <hyprland/src/render/Renderer.hpp>
 #include <hyprland/src/event/EventBus.hpp>
 
@@ -24,11 +26,11 @@
 inline CFunctionHook* g_pRenderWorkspaceHook = nullptr;
 inline CFunctionHook* g_pAddDamageHookA      = nullptr;
 inline CFunctionHook* g_pAddDamageHookB      = nullptr;
-typedef void (*origRenderWorkspace)(void*, PHLMONITOR, PHLWORKSPACE, timespec*, const CBox&);
+typedef void (*origRenderWorkspace)(void*, PHLMONITOR, PHLWORKSPACE, const Time::steady_tp&, const CBox&);
 typedef void (*origAddDamageA)(void*, const CBox&);
 typedef void (*origAddDamageB)(void*, const pixman_region32_t*);
 
-static void hkRenderWorkspace(void* thisptr, PHLMONITOR pMonitor, PHLWORKSPACE pWorkspace, timespec* now, const CBox& geometry) {
+static void hkRenderWorkspace(void* thisptr, PHLMONITOR pMonitor, PHLWORKSPACE pWorkspace, const Time::steady_tp& now, const CBox& geometry) {
     if (!g_pOverview || isRenderingOverview() || g_pOverview->blockOverviewRendering || !g_pOverview->shouldRenderOverviewForMonitor(pMonitor))
         ((origRenderWorkspace)(g_pRenderWorkspaceHook->m_original))(thisptr, pMonitor, pWorkspace, now, geometry);
     else
@@ -36,7 +38,7 @@ static void hkRenderWorkspace(void* thisptr, PHLMONITOR pMonitor, PHLWORKSPACE p
 }
 
 static void hkAddDamageA(void* thisptr, const CBox& box) {
-    const auto PMONITOR = (CMonitor*)thisptr;
+    const auto PMONITOR = static_cast<Monitor::CMonitor*>(thisptr);
 
     if (!g_pOverview || !g_pOverview->shouldRenderOverviewForMonitor(PMONITOR->m_self.lock()) || g_pOverview->blockDamageReporting) {
         ((origAddDamageA)g_pAddDamageHookA->m_original)(thisptr, box);
@@ -47,7 +49,7 @@ static void hkAddDamageA(void* thisptr, const CBox& box) {
 }
 
 static void hkAddDamageB(void* thisptr, const pixman_region32_t* rg) {
-    const auto PMONITOR = (CMonitor*)thisptr;
+    const auto PMONITOR = static_cast<Monitor::CMonitor*>(thisptr);
 
     if (!g_pOverview || !g_pOverview->shouldRenderOverviewForMonitor(PMONITOR->m_self.lock()) || g_pOverview->blockDamageReporting) {
         ((origAddDamageB)g_pAddDamageHookB->m_original)(thisptr, rg);
@@ -83,18 +85,18 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
 
     g_pRenderWorkspaceHook = HyprlandAPI::createFunctionHook(PHANDLE, FNS[0].address, (void*)hkRenderWorkspace);
 
-    FNS = HyprlandAPI::findFunctionsByName(PHANDLE, "addDamageEPK15pixman_region32");
+    FNS = HyprlandAPI::findFunctionsByName(PHANDLE, "_ZN7Monitor8CMonitor9addDamageEPK15pixman_region32");
     if (FNS.empty()) {
-        failNotif("no fns for hook addDamageEPK15pixman_region32");
-        throw std::runtime_error("[he] No fns for hook addDamageEPK15pixman_region32");
+        failNotif("no fns for hook _ZN7Monitor8CMonitor9addDamageEPK15pixman_region32");
+        throw std::runtime_error("[he] No fns for hook _ZN7Monitor8CMonitor9addDamageEPK15pixman_region32");
     }
 
     g_pAddDamageHookB = HyprlandAPI::createFunctionHook(PHANDLE, FNS[0].address, (void*)hkAddDamageB);
 
-    FNS = HyprlandAPI::findFunctionsByName(PHANDLE, "_ZN8CMonitor9addDamageERKN9Hyprutils4Math4CBoxE");
+    FNS = HyprlandAPI::findFunctionsByName(PHANDLE, "_ZN7Monitor8CMonitor9addDamageERKN9Hyprutils4Math4CBoxE");
     if (FNS.empty()) {
-        failNotif("no fns for hook _ZN8CMonitor9addDamageERKN9Hyprutils4Math4CBoxE");
-        throw std::runtime_error("[he] No fns for hook _ZN8CMonitor9addDamageERKN9Hyprutils4Math4CBoxE");
+        failNotif("no fns for hook _ZN7Monitor8CMonitor9addDamageERKN9Hyprutils4Math4CBoxE");
+        throw std::runtime_error("[he] No fns for hook _ZN7Monitor8CMonitor9addDamageERKN9Hyprutils4Math4CBoxE");
     }
 
     g_pAddDamageHookA = HyprlandAPI::createFunctionHook(PHANDLE, FNS[0].address, (void*)hkAddDamageA);

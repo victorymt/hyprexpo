@@ -14,16 +14,20 @@
 #include <hyprland/src/config/ConfigManager.hpp>
 #include <hyprland/src/config/shared/actions/ConfigActions.hpp>
 #include <hyprland/src/config/shared/animation/AnimationTree.hpp>
+#include <hyprland/src/animation/AnimationManager.hpp>
+#include <hyprland/src/animation/WorkspaceAnimationController.hpp>
+#include <hyprland/src/desktop/state/GlobalWindowController.hpp>
+#include <hyprland/src/desktop/state/WindowState.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/layout/LayoutManager.hpp>
 #include <hyprland/src/layout/space/Space.hpp>
-#include <hyprland/src/managers/animation/AnimationManager.hpp>
-#include <hyprland/src/managers/animation/DesktopAnimationManager.hpp>
-#include <hyprland/src/managers/cursor/CursorShapeOverrideController.hpp>
+#include <hyprland/src/pointer/cursor/CursorShapeOverrideController.hpp>
+#include <hyprland/src/pointer/PointerController.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopTimer.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
-#include <hyprland/src/managers/PointerManager.hpp>
+#include <hyprland/src/state/MonitorState.hpp>
+#include <hyprland/src/state/WorkspaceState.hpp>
 #include <hyprland/src/helpers/time/Time.hpp>
 #include <hyprland/src/helpers/varlist/VarList.hpp>
 #include <hyprland/src/helpers/Format.hpp>
@@ -36,9 +40,12 @@
 #include <pango/pangocairo.h>
 #include <algorithm>
 #include <cctype>
+#include <charconv>
 #include <chrono>
+#include <cstdint>
 #include <cmath>
 #include <string>
+#include <string_view>
 #include <vector>
 
 using namespace std::chrono_literals;
@@ -63,6 +70,7 @@ static bool isStringConfig(const std::string& name) {
         {"plugin:hyprexpo:label_bg_shape", true},
         {"plugin:hyprexpo:label_font_family", true},
         {"plugin:hyprexpo:cancel_key", true},
+        {"plugin:hyprexpo:animation_bezier", true},
         {"plugin:hyprexpo:border_grad_current", true},
         {"plugin:hyprexpo:border_grad_focus", true},
         {"plugin:hyprexpo:border_grad_hover", true},
@@ -74,7 +82,8 @@ static bool isStringConfig(const std::string& name) {
 static bool isFloatConfig(const std::string& name) {
     return name == "plugin:hyprexpo:tile_rounding_power" ||
            name == "plugin:hyprexpo:label_scale_hover" ||
-           name == "plugin:hyprexpo:label_scale_focus";
+           name == "plugin:hyprexpo:label_scale_focus" ||
+           name == "plugin:hyprexpo:animation_speed";
 }
 
 static Config::STRING stringDefault(const std::string& name) {
@@ -96,6 +105,7 @@ static Config::STRING stringDefault(const std::string& name) {
         {"plugin:hyprexpo:label_bg_shape", HyprexpoConfig::LABEL_BG_SHAPE_DEFAULT},
         {"plugin:hyprexpo:label_font_family", HyprexpoConfig::LABEL_FONT_FAMILY_DEFAULT},
         {"plugin:hyprexpo:cancel_key", HyprexpoConfig::CANCEL_KEY_DEFAULT},
+        {"plugin:hyprexpo:animation_bezier", HyprexpoConfig::ANIMATION_BEZIER_DEFAULT},
         {"plugin:hyprexpo:border_grad_current", HyprexpoConfig::BORDER_GRAD_CURRENT_DEFAULT},
         {"plugin:hyprexpo:border_grad_focus", HyprexpoConfig::BORDER_GRAD_FOCUS_DEFAULT},
         {"plugin:hyprexpo:border_grad_hover", HyprexpoConfig::BORDER_GRAD_HOVER_DEFAULT},
@@ -113,6 +123,8 @@ static Config::FLOAT floatDefault(const std::string& name) {
         return HyprexpoConfig::LABEL_SCALE_HOVER_DEFAULT;
     if (name == "plugin:hyprexpo:label_scale_focus")
         return HyprexpoConfig::LABEL_SCALE_FOCUS_DEFAULT;
+    if (name == "plugin:hyprexpo:animation_speed")
+        return HyprexpoConfig::ANIMATION_SPEED_DEFAULT;
     return 0.0F;
 }
 
@@ -204,9 +216,82 @@ SConfigValueCompat* getConfigValue(HANDLE, const std::string& name) {
 
     return &compat;
 }
+
+PHLMONITOR getMonitorFromCursor() {
+    if (!g_pInputManager)
+        return nullptr;
+
+    return State::monitorState()->query().vec(g_pInputManager->getMouseCoordsInternal()).run();
+}
+
+const std::vector<PHLWINDOW>& windows() {
+    return Desktop::windowState()->windows();
+}
+
+const std::vector<PHLWORKSPACEREF>& workspaceRefs() {
+    return State::workspaceState()->workspaceRefs();
+}
+
+PHLWORKSPACE getWorkspaceByID(WORKSPACEID id) {
+    return State::workspaceState()->query().id(id).run();
+}
+
+PHLWORKSPACE createNewWorkspace(WORKSPACEID id, MONITORID monitorID, const std::string& name, bool isEmpty) {
+    return State::workspaceState()->create(id, monitorID, name, isEmpty);
+}
+
+void moveWindowToWorkspaceSafe(const PHLWINDOW& window, const PHLWORKSPACE& workspace) {
+    if (window && workspace)
+        Desktop::globalWindowController()->moveWindowToWorkspace(window, workspace);
+}
+
+void warpCursorTo(const Vector2D& point) {
+    Pointer::pointerController()->warpTo(point, true);
+}
+
+void scheduleFrameForMonitor(const PHLMONITOR& monitor) {
+    if (monitor)
+        monitor->scheduleFrame();
+}
+
+PHLWINDOW getWindowByAddress(const std::string& address) {
+    std::string_view value = address;
+    constexpr std::string_view PREFIX = "address:";
+    if (value.starts_with(PREFIX))
+        value.remove_prefix(PREFIX.size());
+    if (value.starts_with("0x") || value.starts_with("0X"))
+        value.remove_prefix(2);
+
+    uintptr_t parsed = 0;
+    const auto result = std::from_chars(value.data(), value.data() + value.size(), parsed, 16);
+    if (result.ec != std::errc{} || result.ptr != value.data() + value.size())
+        return nullptr;
+
+    for (const auto& window : windows()) {
+        if (window && reinterpret_cast<uintptr_t>(window.get()) == parsed)
+            return window;
+    }
+
+    return nullptr;
+}
 }
 
 #define HyprlandAPI CompatHyprlandAPI
+
+static SP<Hyprutils::Animation::SAnimationPropertyConfig> overviewAnimationConfig() {
+    static auto config = makeShared<Hyprutils::Animation::SAnimationPropertyConfig>();
+    static auto* const* PSPEED = (Hyprlang::FLOAT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:animation_speed")->getDataStaticPtr();
+    static auto const* PBEZIER = (Hyprlang::STRING const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:animation_bezier")->getDataStaticPtr();
+
+    config->internalEnabled = 1;
+    config->internalSpeed   = std::max<Hyprlang::FLOAT>(0.0F, **PSPEED);
+    config->internalBezier  = *PBEZIER;
+    config->internalStyle   = "";
+    config->overridden      = true;
+    config->pValues         = config;
+
+    return config;
+}
 
 void clearWithColor(const CHyprColor& color) {
     glClearColor(color.r, color.g, color.b, color.a);
@@ -376,7 +461,7 @@ void restoreWorkspacePreviewState(const PHLWORKSPACE& workspace, const SWorkspac
 std::vector<std::pair<PHLWORKSPACE, SWorkspacePreviewState>> applyExclusiveWorkspacePreviewState(const PHLWORKSPACE& targetWorkspace) {
     std::vector<std::pair<PHLWORKSPACE, SWorkspacePreviewState>> states;
 
-    for (const auto& workspaceRef : g_pCompositor->getWorkspaces()) {
+    for (const auto& workspaceRef : HyprlandAPI::workspaceRefs()) {
         const auto workspace = workspaceRef.lock();
         if (!workspace)
             continue;
@@ -421,7 +506,7 @@ void normalizeMonitorWorkspaceRenderState(PHLMONITOR monitor) {
     if (!monitor || !monitor->m_activeWorkspace)
         return;
 
-    for (const auto& workspaceRef : g_pCompositor->getWorkspaces()) {
+    for (const auto& workspaceRef : HyprlandAPI::workspaceRefs()) {
         const auto workspace = workspaceRef.lock();
         if (!workspace || workspace->m_monitor != monitor || workspace->m_isSpecialWorkspace)
             continue;
@@ -431,13 +516,13 @@ void normalizeMonitorWorkspaceRenderState(PHLMONITOR monitor) {
 
         if (active) {
             workspace->m_visible = true;
-            g_pDesktopAnimationManager->startAnimation(workspace, CDesktopAnimationManager::ANIMATION_TYPE_IN, true, true);
+            Animation::Workspace::startAnimation(workspace, Animation::Workspace::ANIMATION_TYPE_IN, true, true);
         } else if (!workspace->m_alpha->isBeingAnimated() && !workspace->m_renderOffset->isBeingAnimated()) {
             workspace->m_visible = false;
         }
     }
 
-    for (const auto& window : g_pCompositor->m_windows) {
+    for (const auto& window : HyprlandAPI::windows()) {
         if (!window || !window->m_isMapped || window->isHidden() || window->m_pinned || !window->m_workspace || window->m_workspace->m_monitor != monitor)
             continue;
 
@@ -456,7 +541,7 @@ std::vector<SPinnedWindowPreviewState> applyPinnedWindowPreviewState(bool showPi
     if (showPinnedWindows)
         return states;
 
-    for (const auto& window : g_pCompositor->m_windows) {
+    for (const auto& window : HyprlandAPI::windows()) {
         if (!window || !window->m_isMapped || !window->m_pinned)
             continue;
 
@@ -506,7 +591,7 @@ void settleWorkspaceMoveAnimation(const PHLWINDOW& window) {
 }
 
 void settleWorkspaceMoveAnimations() {
-    for (const auto& window : g_pCompositor->m_windows) {
+    for (const auto& window : HyprlandAPI::windows()) {
         if (!window)
             continue;
 
@@ -534,7 +619,7 @@ std::vector<SWindowPreviewState> applyWorkspaceWindowGoalState(const PHLWORKSPAC
     if (!workspace)
         return states;
 
-    for (const auto& window : g_pCompositor->m_windows) {
+    for (const auto& window : HyprlandAPI::windows()) {
         if (!windowVisibleOnWorkspace(window, workspace))
             continue;
 
@@ -609,7 +694,7 @@ void removeOverview(WP<Hyprutils::Animation::CBaseAnimatedVariable> thisptr) {
     // Force one normal compositor frame after the overview pass is removed.
     // Idle/empty workspaces may not produce their own damage immediately.
     g_pHyprRenderer->damageMonitor(MON);
-    g_pCompositor->scheduleFrameForMonitor(MON);
+    HyprlandAPI::scheduleFrameForMonitor(MON);
 }
 
 static bool shouldShowCursorDuringOverview() {
@@ -623,7 +708,7 @@ static void ensureOverviewCursorVisible(bool forceOverviewShape = false, bool re
 
     g_pHyprRenderer->setCursorHidden(false);
     if (forceOverviewShape)
-        Cursor::overrideController->setOverride("left_ptr", Cursor::CURSOR_OVERRIDE_UNKNOWN);
+        Pointer::Cursor::overrideController->setOverride("left_ptr", Pointer::Cursor::CURSOR_OVERRIDE_UNKNOWN);
     if (refreshPosition)
         g_pInputManager->simulateMouseMovement();
 }
@@ -656,7 +741,7 @@ static std::pair<bool, int> getWorkspaceMethodForMonitor(PHLMONITOR monitor) {
 COverview::~COverview() {
     Render::GL::g_pHyprOpenGL->makeEGLCurrent();
     images.clear(); // otherwise we get a vram leak
-    Cursor::overrideController->unsetOverride(Cursor::CURSOR_OVERRIDE_UNKNOWN);
+    Pointer::Cursor::overrideController->unsetOverride(Pointer::Cursor::CURSOR_OVERRIDE_UNKNOWN);
     ensureOverviewCursorVisible(false, true);
     if (const auto MON = pMonitor.lock()) {
         normalizeMonitorWorkspaceRenderState(MON);
@@ -666,7 +751,7 @@ COverview::~COverview() {
 }
 
 COverview::COverview(PHLWORKSPACE startedOn_, bool swipe_) : startedOn(startedOn_), swipe(swipe_) {
-    const auto PMONITOR = g_pCompositor->getMonitorFromCursor();
+    const auto PMONITOR = HyprlandAPI::getMonitorFromCursor();
     pMonitor            = PMONITOR;
 
     static auto* const* PCOLUMNS = (Hyprlang::INT* const*)HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprexpo:columns")->getDataStaticPtr();
@@ -742,7 +827,7 @@ COverview::COverview(PHLWORKSPACE startedOn_, bool swipe_) : startedOn(startedOn
         int currentID         = methodStartID;
         images[0].workspaceID = currentID;
 
-        auto PWORKSPACESTART = g_pCompositor->getWorkspaceByID(currentID);
+        auto PWORKSPACESTART = HyprlandAPI::getWorkspaceByID(currentID);
         if (!PWORKSPACESTART)
             PWORKSPACESTART = CWorkspace::create(currentID, pMonitor.lock(), std::to_string(currentID));
 
@@ -811,7 +896,7 @@ COverview::COverview(PHLWORKSPACE startedOn_, bool swipe_) : startedOn(startedOn
 
         clearWithColor(CHyprColor{0, 0, 0, 1.0});
 
-        const auto PWORKSPACE = g_pCompositor->getWorkspaceByID(image.workspaceID);
+        const auto PWORKSPACE = HyprlandAPI::getWorkspaceByID(image.workspaceID);
 
         if (PWORKSPACE == startedOn)
             currentid = i;
@@ -863,15 +948,16 @@ COverview::COverview(PHLWORKSPACE startedOn_, bool swipe_) : startedOn(startedOn
     PMONITOR->m_activeSpecialWorkspace = openSpecial;
     PMONITOR->m_activeWorkspace        = startedOn;
     startedOn->m_visible               = true;
-    g_pDesktopAnimationManager->startAnimation(startedOn, CDesktopAnimationManager::ANIMATION_TYPE_IN, true, true);
+    Animation::Workspace::startAnimation(startedOn, Animation::Workspace::ANIMATION_TYPE_IN, true, true);
 
     // zoom on the current workspace.
     // const auto& TILE = images[std::clamp(currentid, 0, SIDE_LENGTH * SIDE_LENGTH)];
 
-    g_pAnimationManager->createAnimation(pMonitor->m_size * pMonitor->m_size / tileSize, size, Config::animationTree()->getAnimationPropertyConfig("windowsMove"), AVARDAMAGE_NONE);
-    g_pAnimationManager->createAnimation((-((pMonitor->m_size / (double)SIDE_LENGTH) * Vector2D{currentid % SIDE_LENGTH, currentid / SIDE_LENGTH}) * pMonitor->m_scale) *
-                                             (pMonitor->m_size / tileSize),
-                                         pos, Config::animationTree()->getAnimationPropertyConfig("windowsMove"), AVARDAMAGE_NONE);
+    const auto ANIMATIONCONFIG = overviewAnimationConfig();
+    Animation::mgr()->createAnimation(pMonitor->m_size * pMonitor->m_size / tileSize, size, ANIMATIONCONFIG, AVARDAMAGE_NONE);
+    Animation::mgr()->createAnimation((-((pMonitor->m_size / (double)SIDE_LENGTH) * Vector2D{currentid % SIDE_LENGTH, currentid / SIDE_LENGTH}) * pMonitor->m_scale) *
+                                          (pMonitor->m_size / tileSize),
+                                      pos, ANIMATIONCONFIG, AVARDAMAGE_NONE);
 
     size->setUpdateCallback(damageMonitor);
     pos->setUpdateCallback(damageMonitor);

@@ -121,6 +121,8 @@ plugin {
         bg_col = rgb(111111)
         workspace_method = center current
         gesture_distance = 200
+        animation_speed = 2.0
+        animation_bezier = default
         cancel_key = escape
         show_cursor = 1
         show_pinned_windows = 0
@@ -140,12 +142,16 @@ hl.config({
             bg_col = "rgb(111111)",
             workspace_method = "center current",
             gesture_distance = 200,
+            animation_speed = 2.0,
+            animation_bezier = "default",
             cancel_key = "escape",
             show_cursor = 1,
         },
     },
 })
 ```
+
+`animation_speed` follows Hyprland animation semantics: lower values are faster.
 
 Add a dispatcher binding:
 

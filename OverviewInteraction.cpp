@@ -4,8 +4,8 @@
 #include "HyprexpoLogic.hpp"
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/config/ConfigValue.hpp>
-#include <hyprland/src/helpers/Monitor.hpp>
-#include <hyprland/src/managers/cursor/CursorShapeOverrideController.hpp>
+#include <hyprland/src/output/Monitor.hpp>
+#include <hyprland/src/pointer/cursor/CursorShapeOverrideController.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
 #include <algorithm>
 #include <chrono>
@@ -143,12 +143,13 @@ PHLWINDOW COverview::windowAtTilePoint(int id, const Vector2D& localPoint) const
     if (!isTileValid(id))
         return nullptr;
 
-    const auto WORKSPACE = images[id].pWorkspace ? images[id].pWorkspace : g_pCompositor->getWorkspaceByID(images[id].workspaceID);
+    const auto WORKSPACE = images[id].pWorkspace ? images[id].pWorkspace : HyprlandAPI::getWorkspaceByID(images[id].workspaceID);
     if (!WORKSPACE)
         return nullptr;
 
     const auto POINT = tilePointToWorkspacePoint(id, localPoint);
-    for (auto it = g_pCompositor->m_windows.rbegin(); it != g_pCompositor->m_windows.rend(); ++it) {
+    const auto& windows = HyprlandAPI::windows();
+    for (auto it = windows.rbegin(); it != windows.rend(); ++it) {
         const auto& window = *it;
         if (!windowVisibleOnWorkspace(window, WORKSPACE))
             continue;
@@ -176,7 +177,7 @@ void COverview::beginWindowDrag() {
     const auto POINT = tilePointToWorkspacePoint(dragSourceID, dragStartLocal);
     const auto BOX   = dragWindow->getWindowMainSurfaceBox();
     dragGrabOffset   = POINT - Vector2D{BOX.x, BOX.y};
-    Cursor::overrideController->setOverride("grabbing", Cursor::CURSOR_OVERRIDE_UNKNOWN);
+    Pointer::Cursor::overrideController->setOverride("grabbing", Pointer::Cursor::CURSOR_OVERRIDE_UNKNOWN);
     damage();
 }
 
@@ -206,9 +207,9 @@ PHLWORKSPACE COverview::ensureWorkspaceForTile(int id) {
     if (image.pWorkspace)
         return image.pWorkspace;
 
-    auto workspace = g_pCompositor->getWorkspaceByID(image.workspaceID);
+    auto workspace = HyprlandAPI::getWorkspaceByID(image.workspaceID);
     if (!workspace)
-        workspace = g_pCompositor->createNewWorkspace(image.workspaceID, MON->m_id, std::to_string(image.workspaceID), false);
+        workspace = HyprlandAPI::createNewWorkspace(image.workspaceID, MON->m_id, std::to_string(image.workspaceID), false);
 
     image.pWorkspace = workspace;
     return workspace;
@@ -225,7 +226,7 @@ bool COverview::finishWindowDrag() {
     dragGrabOffset = Vector2D{};
     dropIntent         = {};
     dropIntentTargetID = -1;
-    Cursor::overrideController->setOverride("left_ptr", Cursor::CURSOR_OVERRIDE_UNKNOWN);
+    Pointer::Cursor::overrideController->setOverride("left_ptr", Pointer::Cursor::CURSOR_OVERRIDE_UNKNOWN);
 
     if (!WINDOW || !MOVED)
         return false;
@@ -238,13 +239,13 @@ bool COverview::finishWindowDrag() {
     if (!isTileValid(SOURCE) || !isTileValid(TARGET) || SOURCE == TARGET)
         return true;
 
-    const auto SOURCEWS = images[SOURCE].pWorkspace ? images[SOURCE].pWorkspace : g_pCompositor->getWorkspaceByID(images[SOURCE].workspaceID);
+    const auto SOURCEWS = images[SOURCE].pWorkspace ? images[SOURCE].pWorkspace : HyprlandAPI::getWorkspaceByID(images[SOURCE].workspaceID);
     const auto TARGETWS = ensureWorkspaceForTile(TARGET);
     if (!windowVisibleOnWorkspace(WINDOW, SOURCEWS) || !TARGETWS || TARGETWS == SOURCEWS)
         return true;
 
     images[SOURCE].pWorkspace = SOURCEWS;
-    g_pCompositor->moveWindowToWorkspaceSafe(WINDOW, TARGETWS);
+    HyprlandAPI::moveWindowToWorkspaceSafe(WINDOW, TARGETWS);
     settleWorkspaceMoveAnimation(WINDOW);
     redrawDraggedWindowTiles(SOURCE, TARGET);
     return true;
@@ -259,7 +260,7 @@ bool COverview::moveWindowBetweenVisibleIndices(size_t sourceIndex, size_t targe
     if (!isTileValid(SOURCE) || !isTileValid(TARGET) || SOURCE == TARGET)
         return false;
 
-    const auto SOURCEWS = images[SOURCE].pWorkspace ? images[SOURCE].pWorkspace : g_pCompositor->getWorkspaceByID(images[SOURCE].workspaceID);
+    const auto SOURCEWS = images[SOURCE].pWorkspace ? images[SOURCE].pWorkspace : HyprlandAPI::getWorkspaceByID(images[SOURCE].workspaceID);
     const auto TARGETWS = ensureWorkspaceForTile(TARGET);
     if (!SOURCEWS || !TARGETWS || SOURCEWS == TARGETWS)
         return false;
@@ -269,7 +270,8 @@ bool COverview::moveWindowBetweenVisibleIndices(size_t sourceIndex, size_t targe
         if (!windowVisibleOnWorkspace(window, SOURCEWS))
             return false;
     } else {
-        for (auto it = g_pCompositor->m_windows.rbegin(); it != g_pCompositor->m_windows.rend(); ++it) {
+        const auto& windows = HyprlandAPI::windows();
+        for (auto it = windows.rbegin(); it != windows.rend(); ++it) {
             const auto& candidate = *it;
             if (!windowVisibleOnWorkspace(candidate, SOURCEWS))
                 continue;
@@ -283,7 +285,7 @@ bool COverview::moveWindowBetweenVisibleIndices(size_t sourceIndex, size_t targe
         return false;
 
     images[SOURCE].pWorkspace = SOURCEWS;
-    g_pCompositor->moveWindowToWorkspaceSafe(window, TARGETWS);
+    HyprlandAPI::moveWindowToWorkspaceSafe(window, TARGETWS);
     settleWorkspaceMoveAnimation(window);
     redrawDraggedWindowTiles(SOURCE, TARGET);
     return true;
@@ -524,7 +526,7 @@ void COverview::onWindowMoveToWorkspace(const PHLWINDOW& window, const PHLWORKSP
 
     externalWorkspaceMoveDuringClose = true;
     damage();
-    g_pCompositor->scheduleFrameForMonitor(monitor);
+    HyprlandAPI::scheduleFrameForMonitor(monitor);
 }
 
 void COverview::resetSwipe() {
