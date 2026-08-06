@@ -11,10 +11,14 @@
 #include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/output/Monitor.hpp>
-#include <hyprland/src/managers/KeybindManager.hpp>
 #include <hyprland/src/managers/SeatManager.hpp>
 #include <hyprland/src/managers/input/trackpad/GestureTypes.hpp>
 #include <hyprland/src/managers/input/trackpad/TrackpadGestures.hpp>
+#if __has_include(<hyprland/src/keybinds/Resolver.hpp>)
+#include <hyprland/src/keybinds/Resolver.hpp>
+#else
+#include <hyprland/src/managers/KeybindManager.hpp>
+#endif
 #include <lua.hpp>
 #include <xkbcommon/xkbcommon.h>
 #include <algorithm>
@@ -28,6 +32,14 @@
 static bool g_unloading         = false;
 static bool renderingOverview   = false;
 static SP<Config::Values::CStringValue> g_pCancelKeyConfig;
+
+static auto modifierMaskFromString(const std::string& mods) {
+#if __has_include(<hyprland/src/keybinds/Resolver.hpp>)
+    return mods.empty() ? Input::HL_MODIFIER_NONE : Keybinds::modMaskFromString(mods);
+#else
+    return mods.empty() ? uint32_t{0} : g_pKeybindManager->stringToModMask(mods);
+#endif
+}
 namespace Runtime = HyprexpoRuntime;
 
 static SDispatchResult onExpoDispatcher(std::string arg);
@@ -475,9 +487,7 @@ static SDispatchResult registerExpoGesture(int fingerCount, const std::string& d
     if (direction == TRACKPAD_GESTURE_DIR_NONE)
         return {.success = false, .error = std::format("invalid direction '{}'", directionName)};
 
-    uint32_t modMask = 0;
-    if (!mods.empty())
-        modMask = g_pKeybindManager->stringToModMask(mods);
+    const auto modMask = modifierMaskFromString(mods);
 
     deltaScale = std::clamp(deltaScale, 0.1F, 10.F);
 

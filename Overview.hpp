@@ -146,8 +146,6 @@ class COverview {
 
     CHyprSignalListener          mouseMoveHook;
     CHyprSignalListener          mouseButtonHook;
-    CHyprSignalListener          touchMoveHook;
-    CHyprSignalListener          touchDownHook;
     CHyprSignalListener          workspaceMoveHook;
 
     bool                         swipe             = false;
