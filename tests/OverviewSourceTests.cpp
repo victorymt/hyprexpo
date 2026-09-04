@@ -67,6 +67,15 @@ int main() {
     expect(resetPos < damagePos, "monitor damage happens after overview reset");
     expect(damagePos < schedulePos, "frame scheduling follows monitor damage");
 
+    const auto touchMovePos = source.find("touchMoveHook = Event::bus()->m_events.input.touch.motion.listen");
+    const auto touchDownPos = source.find("touchDownHook = Event::bus()->m_events.input.touch.down.listen");
+    const auto touchSelectPos = source.find("auto onTouchSelect = [this](Event::SCallbackInfo& info)");
+
+    expect(touchMovePos != std::string::npos, "touch motion listener remains wired");
+    expect(touchDownPos != std::string::npos, "touch down listener remains wired");
+    expect(touchSelectPos != std::string::npos, "touch selection callback remains available");
+    expect(touchSelectPos < touchDownPos, "touch selection callback is defined before listener wiring");
+
     if (failures != 0)
         return 1;
 

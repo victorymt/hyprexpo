@@ -18,10 +18,10 @@ HyprExpo should be built against the Hyprland revision that will load it. Nix us
 
 ## Current Known Local Verification
 
-The v1 planning state recorded automated verification against Hyprland `0.55.1` with ABI string:
+Automated verification for this checkout targets Hyprland `0.56.2` with ABI string:
 
 ```text
-a47147bc095e5b3be3eb8bd04f0ac242b968cd4d_aq_0.11_hu_0.13_hg_0.5_hc_0.1_hlg_0.6
+efb50993780079460b0cbed1363e2166a2de1d9f_aq_0.15_hu_0.14_hg_0.5_hc_0.1_hlg_0.6
 ```
 
 That evidence is local verification context, not a blanket compatibility promise for every Hyprland git revision.
