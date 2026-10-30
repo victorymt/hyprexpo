@@ -117,5 +117,9 @@ std::vector<SWindowPreviewState> applyWorkspaceWindowGoalState(const PHLWORKSPAC
 void restoreWorkspaceWindowGoalState(const std::vector<SWindowPreviewState>& states);
 PHLWORKSPACE activateWorkspaceForPreview(PHLMONITOR monitor, const PHLWORKSPACE& workspace);
 void restoreActiveWorkspaceAfterPreview(PHLMONITOR monitor, const PHLWORKSPACE& workspace);
-void renderWorkspacePreview(PHLMONITOR monitor, const PHLWORKSPACE& workspace, const PHLWORKSPACE& startedOn, const PHLWORKSPACE& openSpecial, const CBox& monbox);
+void renderWorkspacePreview(Render::CRenderContext& ctx, PHLMONITOR monitor, const PHLWORKSPACE& workspace, const PHLWORKSPACE& startedOn, const PHLWORKSPACE& openSpecial,
+                            const CBox& monbox);
+// 0.57 dropped the "emptynm" selector, so the next-free-slot lookup is done
+// here instead: walk relative selectors and take the first unoccupied slot.
+WORKSPACEID nextEmptyWorkspaceIDForMonitor(const PHLMONITOR& monitor);
 void removeOverview(WP<Hyprutils::Animation::CBaseAnimatedVariable> thisptr);

@@ -4,7 +4,9 @@
 
 #include "globals.hpp"
 #include "HyprexpoLogic.hpp"
+#include "HyprexpoWorkspaceCompat.hpp"
 #include <hyprland/src/desktop/DesktopTypes.hpp>
+#include <hyprland/src/render/Context.hpp>
 #include <hyprland/src/render/Framebuffer.hpp>
 #include <hyprland/src/render/Texture.hpp>
 #include <hyprland/src/helpers/AnimatedVariable.hpp>
@@ -24,7 +26,7 @@ class COverview {
     COverview(PHLWORKSPACE startedOn_, bool swipe = false);
     ~COverview();
 
-    void render();
+    void render(Render::CRenderContext& ctx);
     void damage();
     void onDamageReported();
     void onPreRender();
@@ -86,7 +88,7 @@ class COverview {
     void       redrawID(int id, bool forcelowres = false);
     void       redrawAll(bool forcelowres = false);
     void       onWorkspaceChange();
-    void       fullRender();
+    void       fullRender(Render::CRenderContext& ctx);
     void       updateHoveredFromMouse();
     void       ensureKbFocusInitialized();
     bool       isTileValid(int id) const;

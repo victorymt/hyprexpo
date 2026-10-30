@@ -9,7 +9,7 @@
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/config/shared/actions/ConfigActions.hpp>
 #include <hyprland/src/desktop/state/FocusState.hpp>
-#include <hyprland/src/desktop/view/Window.hpp>
+#include <hyprland/src/desktop/view/window/Window.hpp>
 #include <hyprland/src/output/Monitor.hpp>
 #include <hyprland/src/managers/SeatManager.hpp>
 #include <hyprland/src/managers/input/trackpad/GestureTypes.hpp>
@@ -141,7 +141,7 @@ static PHLWINDOW windowToBringFromWorkspace(const PHLWORKSPACE& workspace) {
     const auto& windows = Runtime::windows();
     for (auto it = windows.rbegin(); it != windows.rend(); ++it) {
         const auto& window = *it;
-        if (!window || window->m_workspace != workspace || !window->m_isMapped || window->isHidden())
+        if (!window || window->m_workspace != workspace || !Hyprexpo::Compat::isMapped(window) || window->isHidden())
             continue;
 
         return window;
@@ -159,7 +159,7 @@ static SDispatchResult bringWindowFromWorkspace(int64_t sourceWorkspaceID) {
     if (!monitor || !monitor->m_activeWorkspace)
         return {.success = false, .error = "no active monitor/workspace"};
 
-    if (sourceWorkspaceID == monitor->activeWorkspaceID())
+    if (sourceWorkspaceID == Hyprexpo::Compat::activeWorkspaceID(monitor))
         return {};
 
     const auto sourceWorkspace = Runtime::getWorkspaceByID(sourceWorkspaceID);

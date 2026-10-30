@@ -609,7 +609,7 @@ void COverview::enterSubmapIfEnabled() {
         const auto result = Config::Actions::setSubmap("hyprexpo");
         if (!result) {
             previousSubmap.clear();
-            Log::logger->log(Log::ERR, "[hyprexpo] failed to enter hyprexpo submap: {}", result.error().message);
+            LOG(Log::ERR, "[hyprexpo] failed to enter hyprexpo submap: {}", result.error().message);
             return;
         }
         submapActive = true;
@@ -622,7 +622,7 @@ void COverview::resetSubmapIfNeeded() {
         if (currentSubmap == "hyprexpo") {
             const auto result = Config::Actions::setSubmap(previousSubmap.empty() ? "reset" : previousSubmap);
             if (!result)
-                Log::logger->log(Log::ERR, "[hyprexpo] failed to restore submap: {}", result.error().message);
+                LOG(Log::ERR, "[hyprexpo] failed to restore submap: {}", result.error().message);
         }
         submapActive = false;
         previousSubmap.clear();

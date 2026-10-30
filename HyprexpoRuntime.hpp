@@ -1,6 +1,7 @@
 #pragma once
 
 #include "globals.hpp"
+#include "HyprexpoWorkspaceCompat.hpp"
 
 #include <hyprland/src/config/ConfigValue.hpp>
 #include <hyprland/src/desktop/DesktopTypes.hpp>
