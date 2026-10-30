@@ -62,7 +62,6 @@ OverviewSourceTests
 # Planning files
 .planning/*
 .omx/*
-AGENTS.md
 
 # Clangd
 .cache/
